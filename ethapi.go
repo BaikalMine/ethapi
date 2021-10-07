@@ -6,12 +6,22 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/robfig/cron"
 )
+
+func init() {
+	// loads values from .env into the system
+	if err := godotenv.Load(); err != nil {
+		log.Print("No .env file found")
+	}
+}
 
 func Cron() {
 	data := GetJSONData()
@@ -63,6 +73,8 @@ func GetJSONData() []map[string]interface{} {
 	}
 
 	stats := result["payments"].([]interface{})
+	ParamsList := getEnvAsSlice("DATA", []string{}, ",")
+
 	var results []map[string]interface{}
 	for _, s := range stats {
 		message := make(map[string]interface{})
@@ -71,9 +83,20 @@ func GetJSONData() []map[string]interface{} {
 		address := data["address"]
 		message["address"] = address
 		message["timestamp"] = timestamp
+
+		var conf []map[string]interface{}
+		for _, c := range stats {
+			configData := c.(map[string]interface{})
+			for _, d := range ParamsList {
+				config := make(map[string]interface{})
+				config["config"] = configData[d]
+				conf = append(conf, config)
+				message["config"] = conf
+			}
+		}
+
 		results = append(results, message)
 	}
-
 	return results
 }
 
@@ -95,4 +118,24 @@ func WriteDB(timestamp int64, address string) error {
 	log.Printf("Write data to DB --->>> %s", time.Since(start))
 
 	return err1
+}
+
+func getEnv(key string, defaultVal string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+
+	return defaultVal
+}
+
+func getEnvAsSlice(name string, defaultVal []string, sep string) []string {
+	valStr := getEnv(name, "")
+
+	if valStr == "" {
+		return defaultVal
+	}
+
+	val := strings.Split(valStr, sep)
+
+	return val
 }
