@@ -22,7 +22,7 @@ func Cron() {
 		ts = int64(s["timestamp"].(float64))
 	}
 	cron := cron.New()
-	writeTime := "*/10 * * * *"
+	writeTime := "@every 24h"
 	log.Printf("DB write time : %v", writeTime)
 	cron.AddFunc(writeTime, func() {
 		WriteDB(ts, address)
@@ -86,7 +86,7 @@ func WriteDB(timestamp int64, address string) error {
 	}
 	defer db.Close()
 
-	_, err1 := db.Exec("insert into testtable (timestamp, Prices) values ($1, $2)", timestamp, address)
+	_, err1 := db.Exec("insert into testtable (timestamp, address) values ($1, $2)", timestamp, address)
 	if err1 != nil {
 		panic(err1)
 	}
