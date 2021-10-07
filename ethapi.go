@@ -15,13 +15,17 @@ import (
 
 func Cron() {
 	data := GetJSONData()
-	prices := data["Price_USD"]
-	ts := data["Timestamp"]
+	var address string
+	ts := int64(0)
+	for _, s := range data {
+		address = s["address"].(string)
+		ts = int64(s["timestamp"].(float64))
+	}
 	cron := cron.New()
-	writeTime := "@every 24h"
+	writeTime := "*/10 * * * *"
 	log.Printf("DB write time : %v", writeTime)
 	cron.AddFunc(writeTime, func() {
-		WriteDB(int64(ts.(float64)), prices.(float64))
+		WriteDB(ts, address)
 	})
 	cron.Start()
 }
@@ -41,8 +45,8 @@ func main() {
 	app.Listen(":3000")
 }
 
-func GetJSONData() map[string]interface{} {
-	resp, err := http.Get("https://api.etherscan.io/api?module=stats&action=ethprice&apikey=M2XTQNNNBNWZ42IA3T9PTSNXP7NHPCUEQB")
+func GetJSONData() []map[string]interface{} {
+	resp, err := http.Get("https://eth-pps.baikalmine.com/api/payments")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -58,18 +62,22 @@ func GetJSONData() map[string]interface{} {
 		log.Fatal(jsonErr)
 	}
 
-	stats := result["result"].(map[string]interface{})
-	timestamp := stats["ethusd_timestamp"]
-	price_usd := stats["ethusd"]
+	stats := result["payments"].([]interface{})
+	var results []map[string]interface{}
+	for _, s := range stats {
+		message := make(map[string]interface{})
+		data := s.(map[string]interface{})
+		timestamp := data["timestamp"]
+		address := data["address"]
+		message["address"] = address
+		message["timestamp"] = timestamp
+		results = append(results, message)
+	}
 
-	message := make(map[string]interface{})
-	message["TimeStamp"] = timestamp
-	message["Price_USD"] = price_usd
-
-	return message
+	return results
 }
 
-func WriteDB(timestamp int64, prices float64) error {
+func WriteDB(timestamp int64, address string) error {
 
 	connStr := "user=postgres password=1 dbname=test sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
@@ -78,7 +86,7 @@ func WriteDB(timestamp int64, prices float64) error {
 	}
 	defer db.Close()
 
-	_, err1 := db.Exec("insert into testtable (timestamp, Prices) values ($1, $2)", timestamp, prices)
+	_, err1 := db.Exec("insert into testtable (timestamp, Prices) values ($1, $2)", timestamp, address)
 	if err1 != nil {
 		panic(err1)
 	}
